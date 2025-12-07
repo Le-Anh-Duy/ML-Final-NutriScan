@@ -82,6 +82,43 @@ food-recommendation-app
 5. **Open your browser**:
    Navigate to `http://localhost:3000` to view the application.
 
+## AI Backend Integration
+The application currently uses a mock AI service (`src/services/aiService.js`) for demonstration purposes. To connect it to a real Python AI backend:
+
+1. **Set up the Python Backend**:
+   Ensure your Python API is running (e.g., on `http://localhost:5000`) and accepts POST requests with an image file.
+
+2. **Configure Environment Variables**:
+   Add the API URL to your `.env` file:
+   ```env
+   VITE_AI_API_URL=http://localhost:5000/predict
+   ```
+
+3. **Update the Service**:
+   Modify `src/services/aiService.js` to make actual API calls:
+
+   ```javascript
+   export const analyzeImage = async (imageFile) => {
+       const formData = new FormData();
+       formData.append('file', imageFile);
+
+       try {
+           const response = await fetch(import.meta.env.VITE_AI_API_URL, {
+               method: 'POST',
+               body: formData,
+           });
+
+           if (!response.ok) throw new Error('AI Analysis failed');
+
+           const data = await response.json();
+           return data; // Ensure backend returns { predictions: [], bestMatch: {} }
+       } catch (error) {
+           console.error("AI Service Error:", error);
+           throw error;
+       }
+   };
+   ```
+
 ## Contributing
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
 
