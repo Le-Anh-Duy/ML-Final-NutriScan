@@ -8,6 +8,7 @@ import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import History from './pages/History';
+import DailyRecommendations from './pages/DailyRecommendations';
 import { useAuth } from './context/AuthContext';
 
 const PrivateRoute = ({ children }) => {
@@ -43,6 +44,13 @@ const App = () => {
           <PrivateRoute>
             <Layout>
               <History />
+            </Layout>
+          </PrivateRoute>
+        } />
+        <Route path="/daily-recommendations" element={
+          <PrivateRoute>
+            <Layout>
+              <DailyRecommendations />
             </Layout>
           </PrivateRoute>
         } />

@@ -119,6 +119,24 @@ The application currently uses a mock AI service (`src/services/aiService.js`) f
    };
    ```
 
+## Recommendation System Logic
+
+### Daily Recommendations
+The "Daily Recommendations" feature (`src/pages/DailyRecommendations.jsx`) provides curated meal suggestions based on the user's health profile.
+
+**Selection Rules:**
+The logic is currently handled in `src/services/aiService.js` (`getDailyRecommendations` function):
+- **Lose Weight**: Filters for foods with **< 400 calories**.
+- **Gain Muscle**: Filters for foods with **> 20g protein**.
+- **Maintain Weight / Other**: Selects random balanced meals from the database.
+
+**Update Frequency:**
+- **Current Implementation**: Recommendations are generated on-the-fly each time the user visits the page or refreshes.
+- **Future Improvement**: To make this a true "Daily" recommendation:
+  1. The backend should generate the list once every 24 hours (e.g., via a cron job or scheduled Cloud Function).
+  2. Store the generated list in Firestore under a `daily_recommendations` collection linked to the user ID and the current date.
+  3. The frontend should check Firestore first; if a recommendation for today exists, display it. If not, trigger the generation logic.
+
 ## Contributing
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
 
