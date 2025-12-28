@@ -113,7 +113,7 @@ const Recommendations = () => {
         <div className="container mx-auto px-4 py-6 pb-24">
             {/* GỢI Ý HÔM NAY (CACHE 24H) */}
             <div className="mb-8">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">📅 Thực đơn hôm nay</h2>
+                <h2 className="text-xl font-bold text-gray-800 mb-4">📅 Today's Menu</h2>
                 {loadingDaily ? <p>Đang tải...</p> : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {dailyMeals.map((meal, idx) => (
@@ -141,7 +141,7 @@ const Recommendations = () => {
                     ) : (
                         <>
                             <span className="text-4xl mb-2">📷</span>
-                            <p className="text-gray-500">Chạm để chụp ảnh</p>
+                            <p className="text-gray-500">Scan Food</p>
                         </>
                     )}
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
