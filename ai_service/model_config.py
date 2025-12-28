@@ -18,9 +18,9 @@ except ImportError:
 
 MODEL_CONFIGS = [
     {
-        "id": "lsnet_tiny_distill",
+        "id": "lsnet_b",
         "type": "classification",
-        "name": "LSNet Tiny (Vietnamese Food)",
+        "name": "LSNet Base (Vietnamese Food)",
         
         # Paths to your copied files
         "weights_path": os.path.join(current_dir, "pretrained", "lsnet_b_finetuned.pth"),
