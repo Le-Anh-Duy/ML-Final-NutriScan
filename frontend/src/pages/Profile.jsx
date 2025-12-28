@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 // Helper: Kiểm tra xem date có phải là hôm nay không
@@ -27,13 +27,23 @@ const Profile = () => {
     const { currentUser, logout } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
+
+    // State loading khi đang lưu dữ liệu
+    const [isSaving, setIsSaving] = useState(false);
+
+    // State kiểm soát chế độ sửa
+    const [isEditing, setIsEditing] = useState(false);
     
     // State dữ liệu user
     const [user, setUser] = useState({
         name: '',
         email: '',
         avatar: '',
-        healthProfile: {},
+        healthProfile: {
+            height: '',
+            weight: '',
+            goal: 'Maintain Weight'
+        },
         recentScans: []
     });
 
@@ -54,6 +64,49 @@ const Profile = () => {
         }
     };
 
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        const healthFields = ['height', 'weight', 'goal'];
+
+        if (healthFields.includes(name)) {
+            // Cập nhật thông tin sức khỏe (nested object)
+            setUser(prev => ({
+                ...prev,
+                healthProfile: {
+                    ...prev.healthProfile,
+                    [name]: value
+                }
+            }));
+        } else {
+            // Cập nhật thông tin cơ bản (name, email)
+            setUser(prev => ({
+                ...prev,
+                [name]: value
+            }));
+        }
+    };
+
+    // 4. Hàm lưu dữ liệu lên Firestore
+    const handleSave = async () => {
+        if (!currentUser) return;
+        
+        setIsSaving(true); // Bắt đầu loading
+        try {
+            const userRef = doc(db, "users", currentUser.uid);
+            await updateDoc(userRef, {
+                name: user.name,
+                healthProfile: user.healthProfile
+            });
+            setIsEditing(false);
+            alert("Đã cập nhật hồ sơ!");
+        } catch (error) {
+            console.error("Lỗi khi lưu:", error);
+            alert("Lỗi khi lưu, vui lòng thử lại.");
+        } finally {
+            setIsSaving(false); // Kết thúc loading
+        }
+    };
+    
     useEffect(() => {
         const fetchUserData = async () => {
             if (currentUser) {
@@ -66,7 +119,10 @@ const Profile = () => {
                         setUser(prev => ({
                             ...prev,
                             ...userData,
-                            // Đảm bảo recentScans luôn là mảng
+
+                            email: userData.email || currentUser.email,
+                            // Fallbacks nếu trường không tồn tại
+                            healthProfile: userData.healthProfile || { height: '', weight: '', goal: 'Maintain Weight' },
                             recentScans: userData.recentScans || []
                         }));
 
@@ -98,25 +154,55 @@ const Profile = () => {
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-2xl">
-            {/* 1. THÔNG TIN TÀI KHOẢN (HEADER) */}
+            {/* 1. THÔNG TIN TÀI KHOẢN */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6 flex items-center space-x-4">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-2xl">
-                    {/* Lấy ký tự đầu của tên hoặc email */}
-                    {user.name ? user.name.charAt(0).toUpperCase() : currentUser.email.charAt(0).toUpperCase()}
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-2xl shrink-0">
+                    {user.name ? user.name.charAt(0).toUpperCase() : (currentUser.email ? currentUser.email.charAt(0).toUpperCase() : 'U')}
                 </div>
-                <div className="flex-1">
-                    <h1 className="text-xl font-bold text-gray-800">{user.name || "Người dùng mới"}</h1>
-                    <p className="text-gray-500 text-sm">{currentUser.email}</p>
+                
+                <div className="flex-1 min-w-0">
+                    {isEditing ? (
+                        <div className="space-y-2">
+                            <input 
+                                type="text" 
+                                name="name"
+                                value={user.name} 
+                                onChange={handleInputChange}
+                                className="w-full border border-blue-300 rounded px-2 py-1 font-bold text-gray-800"
+                                placeholder="Tên hiển thị"
+                            />
+                            {/* Vô hiệu hóa input email để user không sửa nhầm */}
+                            <input 
+                                type="text" 
+                                name="email"
+                                value={user.email} 
+                                disabled 
+                                className="w-full border border-gray-300 bg-gray-100 rounded px-2 py-1 text-sm text-gray-500 cursor-not-allowed"
+                                placeholder="Email"
+                            />
+                        </div>
+                    ) : (
+                        <>
+                            <h1 className="text-xl font-bold text-gray-800 truncate">{user.name || "Người dùng mới"}</h1>
+                            <p className="text-gray-500 text-sm truncate">{user.email || currentUser.email}</p>
+                        </>
+                    )}
                 </div>
-                <button 
-                    onClick={handleLogout}
-                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                >
-                    Đăng xuất
-                </button>
+
+                <div className="flex flex-col space-y-2">
+                    <button onClick={handleLogout} className="px-3 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200">
+                        Đăng xuất
+                    </button>
+                    {/* Nút bật/tắt sửa */}
+                    {!isEditing && (
+                         <button onClick={() => setIsEditing(true)} className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-xs font-bold hover:bg-blue-100">
+                            Sửa
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* 2. TỔNG QUAN DINH DƯỠNG HÔM NAY*/}
+            {/* 2. TỔNG QUAN DINH DƯỠNG */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl p-6 shadow-lg text-white mb-6">
                 <h2 className="text-lg font-semibold mb-4 border-b border-blue-400 pb-2">
                     Hôm nay bạn đã nạp
@@ -144,14 +230,12 @@ const Profile = () => {
                     <div className="space-y-3">
                         {todayStats.foods.map((food, index) => (
                             <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center">
-                                {/* Nếu có ảnh món ăn thì hiển thị, không thì dùng icon mặc định */}
                                 <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mr-4 text-orange-500 font-bold">
                                     {food.calories > 300 ? '🍖' : '🥗'}
                                 </div>
                                 <div className="flex-1">
                                     <h4 className="font-bold text-gray-800">{food.name}</h4>
                                     <p className="text-xs text-gray-500">
-                                        {/* Hiển thị giờ nếu có */}
                                         {food.date && new Date(food.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                     </p>
                                 </div>
@@ -165,34 +249,87 @@ const Profile = () => {
                 ) : (
                     <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                         <p className="text-gray-500">Hôm nay bạn chưa ghi nhận món ăn nào.</p>
-                        <button 
-                            onClick={() => navigate('/recommendations')} 
-                            className="mt-2 text-blue-600 font-medium hover:underline"
-                        >
+                        <button onClick={() => navigate('/recommendations')} className="mt-2 text-blue-600 font-medium hover:underline">
                             Quét món ăn ngay →
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* 4. THÔNG TIN SỨC KHỎE (PROFILE INFO) - Giữ nguyên hoặc rút gọn */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            {/* 4. THÔNG TIN SỨC KHỎE */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-10">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold text-gray-800">Hồ sơ sức khỏe</h3>
-                    <button className="text-blue-600 text-sm font-medium hover:underline">Chỉnh sửa</button>
+                    {isEditing ? (
+                        <div className="space-x-2">
+                            <button onClick={() => setIsEditing(false)} disabled={isSaving} className="text-gray-500 text-sm hover:underline">Hủy</button>
+                            {/* (Đã sửa) Disabled nút Lưu khi đang saving */}
+                            <button onClick={handleSave} disabled={isSaving} className="text-blue-600 text-sm font-bold hover:underline">
+                                {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                            </button>
+                        </div>
+                    ) : (
+                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-sm font-medium hover:underline">Chỉnh sửa</button>
+                    )}
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
+                    {/* CHIỀU CAO */}
                     <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-gray-500 text-xs">Chiều cao</p>
-                        <p className="font-semibold">{user.healthProfile.height || '--'} cm</p>
+                        <p className="text-gray-500 text-xs mb-1">Chiều cao (cm)</p>
+                        {isEditing ? (
+                            <input
+                                type="number"
+                                name="height"
+                                min="0" // (Đã sửa) Thêm min=0
+                                value={user.healthProfile.height}
+                                onChange={handleInputChange}
+                                className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-sm"
+                                placeholder="0"
+                            />
+                        ) : (
+                            <p className="font-semibold">{user.healthProfile.height || '--'} cm</p>
+                        )}
                     </div>
+
+                    {/* CÂN NẶNG */}
                     <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-gray-500 text-xs">Cân nặng</p>
-                        <p className="font-semibold">{user.healthProfile.weight || '--'} kg</p>
+                        <p className="text-gray-500 text-xs mb-1">Cân nặng (kg)</p>
+                        {isEditing ? (
+                            <input
+                                type="number"
+                                name="weight"
+                                min="0" // (Đã sửa) Thêm min=0
+                                value={user.healthProfile.weight}
+                                onChange={handleInputChange}
+                                className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-sm"
+                                placeholder="0"
+                            />
+                        ) : (
+                            <p className="font-semibold">{user.healthProfile.weight || '--'} kg</p>
+                        )}
                     </div>
+
+                    {/* MỤC TIÊU */}
                     <div className="p-3 bg-gray-50 rounded-lg col-span-2">
-                        <p className="text-gray-500 text-xs">Mục tiêu</p>
-                        <p className="font-semibold text-blue-600">{user.healthProfile.goal || 'Duy trì cân nặng'}</p>
+                        <p className="text-gray-500 text-xs mb-1">Mục tiêu</p>
+                        {isEditing ? (
+                            <select
+                                name="goal"
+                                value={user.healthProfile.goal}
+                                onChange={handleInputChange}
+                                className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-sm"
+                            >
+                                <option value="Lose Weight">Giảm cân</option>
+                                <option value="Maintain Weight">Duy trì cân nặng</option>
+                                <option value="Gain Muscle">Tăng cơ</option>
+                            </select>
+                        ) : (
+                            <p className="font-semibold text-blue-600">
+                                {user.healthProfile.goal === 'Lose Weight' ? 'Giảm cân' : 
+                                 user.healthProfile.goal === 'Gain Muscle' ? 'Tăng cơ' : 'Duy trì cân nặng'}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
