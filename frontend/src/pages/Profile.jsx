@@ -4,6 +4,9 @@ import { db } from '../config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
+const [isSaving, setIsSaving] = useState(false); // Shows "Saving..." loading state
+const [isEditing, setIsEditing] = useState(false); // Toggles between View/Edit mode
+
 // Helper: Check if date is today
 const isToday = (dateStringOrTimestamp) => {
     if (!dateStringOrTimestamp) return false;
@@ -21,6 +24,51 @@ const isToday = (dateStringOrTimestamp) => {
     return date.getDate() === today.getDate() &&
            date.getMonth() === today.getMonth() &&
            date.getFullYear() === today.getFullYear();
+};
+
+const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    const healthFields = ['height', 'weight', 'goal'];
+
+    if (healthFields.includes(name)) {
+        // Update nested healthProfile object
+        setUser(prev => ({
+            ...prev,
+            healthProfile: {
+                ...prev.healthProfile,
+                [name]: value
+            }
+        }));
+    } else {
+        // Update top-level fields (like Name)
+        setUser(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    }
+};
+
+const handleSave = async () => {
+    if (!currentUser) return;
+    
+    setIsSaving(true);
+    try {
+        const userRef = doc(db, "users", currentUser.uid);
+        
+        // This pushes the current state to Firebase
+        await updateDoc(userRef, {
+            name: user.name,
+            healthProfile: user.healthProfile
+        });
+        
+        setIsEditing(false); // Exit edit mode
+        alert("Profile updated successfully!");
+    } catch (error) {
+        console.error("Error saving:", error);
+        alert("Error saving profile. Please try again.");
+    } finally {
+        setIsSaving(false);
+    }
 };
 
 const Profile = () => {
@@ -326,7 +374,7 @@ const Profile = () => {
                         ) : (
                             <p className="font-semibold text-blue-600">
                                 {user.healthProfile.goal === 'Lose Weight' ? 'Lose Weight' : 
-                                 user.healthProfile.goal === 'Gain Muscle' ? 'Gain Muscle' : 'Maintain Weight'}
+                                user.healthProfile.goal === 'Gain Muscle' ? 'Gain Muscle' : 'Maintain Weight'}
                             </p>
                         )}
                     </div>
