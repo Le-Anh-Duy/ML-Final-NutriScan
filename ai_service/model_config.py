@@ -23,14 +23,14 @@ MODEL_CONFIGS = [
         "name": "LSNet Tiny (Vietnamese Food)",
         
         # Paths to your copied files
-        "weights_path": os.path.join(current_dir, "pretrained", "lsnet_vietnamesefood_best.pth"),
-        "classes_path": os.path.join(current_dir, "pretrained", "vietnamese_food_classes.txt"),
+        "weights_path": os.path.join(current_dir, "pretrained", "lsnet_b_finetuned.pth"),
+        "classes_path": os.path.join(current_dir, "pretrained", "vietnamese_food_classes_103.txt"),
         
         # Backup URLs (Auto-download if files are missing)
-        "weights_url": "https://huggingface.co/MatchaMacchiato/LSNet_VietnameseFood/resolve/main/lsnet_vietnamesefood_best.pth?download=true",
-        "classes_url": "https://huggingface.co/MatchaMacchiato/LSNet_VietnameseFood/resolve/main/vietnamese_food_classes.txt?download=true",
+        "weights_url": "https://huggingface.co/giahuy4205/lsnet-finetuned/resolve/main/lsnet_b_finetuned.pth?download=true",
+        # "classes_url": "https://huggingface.co/MatchaMacchiato/LSNet_VietnameseFood/resolve/main/vietnamese_food_classes.txt?download=true",
         
-        "num_classes": 30, # Change to 103 if using the larger dataset
-        "arch_fn": lsnet_t_distill
+        "num_classes": 103, # Change to 103 if using the larger dataset
+        "arch_fn": lsnet_b
     }
 ]
