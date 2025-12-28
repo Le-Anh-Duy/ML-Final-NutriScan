@@ -1,61 +1,108 @@
-import { foodDatabase } from '../data/foodDatabase';
+import { getNutritionForFood, foodDatabase } from '../data/foodDatabase'; // Ensure path matches your folder structure
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
+// Get the API URL from the .env file
+const AI_API_URL = import.meta.env.VITE_AI_API_URL;
+
 /**
- * 1. MOCK AI: Giả lập phân tích ảnh (KHÔNG gọi Python Backend)
- * Trả về kết quả random từ foodDatabase sau 1.5s
+ * Helper to convert File object to Base64 string
  */
-export const analyzeImage = async (imageFile) => {
-    // Giả lập độ trễ mạng
-    const delay = 1000 + Math.random() * 1000;
-    await new Promise(resolve => setTimeout(resolve, delay));
-
-    // Lấy random từ database có sẵn
-    // Logic: Xáo trộn mảng và lấy 5 phần tử đầu
-    const shuffled = [...foodDatabase].sort(() => 0.5 - Math.random());
-    
-    // Tạo độ tin cậy giả (confidence)
-    const predictions = shuffled.slice(0, 5).map((food, index) => ({
-        ...food,
-        // Món đầu tiên tin cậy cao (85-95%), các món sau thấp hơn
-        confidence: index === 0 ? 85 + Math.floor(Math.random() * 10) : 60 - (index * 10) + Math.floor(Math.random() * 10)
-    }));
-
-    return {
-        bestMatch: predictions[0],
-        predictions: predictions
-    };
+const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+    });
 };
 
 /**
- * 2. REAL LOGIC: Gợi ý món ăn hằng ngày (Cache 24h trên Firestore)
- * Giữ nguyên logic này để user không bị đổi thực đơn mỗi lần F5
+ * 1. REAL AI: Analyze Image via Python Backend
+ */
+export const analyzeImage = async (imageFile) => {
+    if (!AI_API_URL) {
+        console.error("AI API URL is missing. Check your .env file.");
+        throw new Error("Configuration Error: AI API URL missing");
+    }
+
+    try {
+        // 1. Convert image to Base64
+        const base64Image = await fileToBase64(imageFile);
+
+        // 2. Call Python Backend
+        console.log("Sending image to:", AI_API_URL);
+        const response = await fetch(AI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                image: base64Image
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`AI Server Error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.success || !data.predictions || data.predictions.length === 0) {
+            throw new Error('No food detected');
+        }
+
+        // 3. Map Backend Results to Frontend Nutrition Database
+        // Backend returns: [{ name: "Pho Ga", confidence: 0.95 }]
+        // Database lookup: Adds calories, carbs, fat, etc.
+        const mappedPredictions = data.predictions.map(pred => {
+            const nutrition = getNutritionForFood(pred.name);
+            return {
+                ...nutrition,
+                confidence: (pred.confidence * 100).toFixed(1) // Format to 95.5
+            };
+        });
+
+        return {
+            bestMatch: mappedPredictions[0], // Top 1 prediction
+            predictions: mappedPredictions   // All candidates
+        };
+
+    } catch (error) {
+        console.error("AI Service Error:", error);
+        throw error;
+    }
+};
+
+/**
+ * 2. DAILY RECOMMENDATIONS (Cached Logic)
+ * Kept the same as before so the 'Daily Recommendations' page still works.
  */
 export const getDailyRecommendations = async (userProfile, userId) => {
     if (!userId) return [];
 
-    const todayStr = new Date().toDateString(); // Ví dụ: "Mon Dec 28 2025"
+    const todayStr = new Date().toDateString();
     const cacheRef = doc(db, 'daily_caches', userId);
 
     try {
-        // Kiểm tra xem hôm nay đã tạo thực đơn chưa
+        // Check Firestore cache first
         const docSnap = await getDoc(cacheRef);
         if (docSnap.exists()) {
             const data = docSnap.data();
-            // Nếu đúng ngày hôm nay -> Trả về thực đơn đã lưu (KHÔNG Random lại)
             if (data.date === todayStr && data.recommendations?.length > 0) {
-                console.log("🎯 Serving cached recommendations (Firebase)");
+                console.log("🎯 Serving cached recommendations");
                 return data.recommendations;
             }
         }
     } catch (e) { console.warn("Cache read error", e); }
 
-    // Nếu chưa có thực đơn hôm nay -> Tạo mới (Random thông minh theo Goal)
+    // Generate new recommendations if cache missed
     await new Promise(r => setTimeout(r, 500)); 
     
     const goal = userProfile?.goal || 'Maintain Weight';
     let recs = [];
+    // Helper to pick random items
     const pickRandom = (arr, n) => arr.sort(() => 0.5 - Math.random()).slice(0, n);
 
     if (goal === 'Lose Weight') {
@@ -68,11 +115,11 @@ export const getDailyRecommendations = async (userProfile, userId) => {
     
     const finalRecs = recs.map(f => ({
         ...f, 
-        reason: goal === 'Lose Weight' ? 'Ít calo, hỗ trợ giảm cân' : 
-                goal === 'Gain Muscle' ? 'Giàu protein, hỗ trợ tăng cơ' : 'Dinh dưỡng cân bằng'
+        reason: goal === 'Lose Weight' ? 'Low calorie option' : 
+                goal === 'Gain Muscle' ? 'High protein option' : 'Balanced meal'
     }));
 
-    // Lưu thực đơn mới vào Firebase để dùng lại trong ngày
+    // Save to cache
     try {
         await setDoc(cacheRef, {
             date: todayStr,

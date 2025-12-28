@@ -1,3 +1,5 @@
+import { removeAccents } from '../utils/helpers';
+
 export const foodDatabase = [
     {
         name: 'Bun Bo Hue',
@@ -136,18 +138,25 @@ export const foodDatabase = [
     }
 ];
 
-export const getNutritionForFood = (foodName) => {
-    const food = foodDatabase.find(f => f.name.toLowerCase() === foodName.toLowerCase());
+export const getNutritionForFood = (aiFoodName) => {
+    const cleanAiName = removeAccents(aiFoodName);
+
+    const food = foodDatabase.find(f => {
+        const cleanDbName = removeAccents(f.name);
+        return cleanDbName === cleanAiName || cleanDbName.includes(cleanAiName) || cleanAiName.includes(cleanDbName);
+    });
+
     if (food) return food;
     
-    // Default fallback if not found
     return {
-        name: foodName,
-        calories: 250,
-        protein: 10,
-        carbs: 30,
+        name: aiFoodName, 
+        calories: 300,    
+        protein: 15,
+        carbs: 40,
         fat: 10,
-        tags: ['Unknown'],
-        description: 'Nutritional information estimated.'
+        tags: ['AI Detected'],
+        description: 'Thông tin dinh dưỡng chưa có trong cơ sở dữ liệu.'
     };
 };
+
+
