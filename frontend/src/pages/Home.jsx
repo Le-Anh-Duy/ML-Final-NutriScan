@@ -9,7 +9,6 @@ const Home = () => {
     const [recentFoods, setRecentFoods] = useState([]);
     const [dailyRec, setDailyRec] = useState(null);
     const { currentUser } = useAuth();
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -18,133 +17,147 @@ const Home = () => {
                     const userDoc = await getDoc(doc(db, "users", currentUser.uid));
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
-                        // Get recent scans and reverse to show newest first
+                        
+                        // 1. Lấy danh sách món ăn gần đây
                         const scans = userData.recentScans || [];
-                        setRecentFoods(scans.reverse());
+                        setRecentFoods(scans.slice().reverse().slice(0, 5)); // 5 món mới nhất
 
-                        // Get Daily Recommendation
-                        const recs = await getDailyRecommendations(userData.healthProfile);
-                        if (recs.length > 0) {
-                            setDailyRec(recs[0]); // Just show the first one
+                        // 2. Lấy Daily Recommendation
+                        const recs = await getDailyRecommendations(userData.healthProfile, currentUser.uid);
+                        
+                        if (recs && recs.length > 0) {
+                            setDailyRec(recs[0]); // Lấy món đầu tiên
                         }
                     }
                 } catch (error) {
                     console.error("Error fetching data:", error);
                 }
             }
-            setLoading(false);
         };
 
         fetchData();
     }, [currentUser]);
 
-    if (loading) {
-        return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
-    }
-
-    // Only show the first 3 items
-    const displayedFoods = recentFoods.slice(0, 3);
-
     return (
-        <div className="container mx-auto p-4 min-h-screen pb-20">
-            {/* Header Section */}
+        <div className="container mx-auto px-4 py-6 pb-24">
+            {/* --- HEADER --- */}
             <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Welcome Back!</h1>
-                    <p className="text-gray-500">Here's your nutrition overview</p>
+                    <h1 className="text-2xl font-bold text-gray-800">Hello, Foodie! 👋</h1>
+                    <p className="text-gray-500">Track your meals & stay healthy</p>
                 </div>
-                <Link to="/recommendations" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2">
-                    <span>📷</span> Scan Food
+                <Link to="/profile" className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden shadow-sm hover:ring-2 hover:ring-blue-200 transition-all">
+                    <div className="w-full h-full flex items-center justify-center text-gray-500 font-bold">
+                        {currentUser?.email?.charAt(0).toUpperCase()}
+                    </div>
                 </Link>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left Column: Recent Activity (Takes up 2/3 on large screens) */}
-                <div className="lg:col-span-2">
+            {/* --- MAIN GRID LAYOUT --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                
+                {/* === RECENT ACTIVITY === */}
+                <div className="order-2 lg:order-1">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-gray-800">Recent Activity</h2>
-                        {recentFoods.length > 3 && (
-                            <Link to="/history" className="text-blue-600 font-medium hover:underline text-sm">
-                                View All
-                            </Link>
-                        )}
+                        <h2 className="text-lg font-bold text-gray-800">Recent Activity</h2>
+                        <Link to="/recommendations" className="text-blue-600 text-sm font-medium hover:underline">
+                            + New Scan
+                        </Link>
                     </div>
 
-                    {displayedFoods.length === 0 ? (
-                        <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
-                            <p className="text-gray-500 text-lg mb-4">No food history yet.</p>
-                            <p className="text-gray-400 mb-6">Start by scanning your first meal!</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {displayedFoods.map((food, index) => (
-                                <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
-                                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-2xl flex-shrink-0">
-                                        🍽️
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-gray-800">{food.name}</h3>
-                                        <p className="text-sm text-gray-500">{food.date}</p>
+                    {recentFoods.length > 0 ? (
+                        <div className="space-y-3">
+                            {recentFoods.map((food, index) => (
+                                <div key={index} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-shadow">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center text-xl overflow-hidden">
+                                            {food.image ? (
+                                                <img src={food.image} alt={food.name} className="w-full h-full object-cover"/>
+                                            ) : (
+                                                '🍱'
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-800 text-sm">{food.name}</h4>
+                                            <p className="text-xs text-gray-500">
+                                                {/* Hiển thị giờ nếu là timestamp, hoặc ngày */}
+                                                {food.timestamp 
+                                                    ? new Date(food.timestamp.seconds ? food.timestamp.seconds * 1000 : food.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
+                                                    : 'Today'
+                                                }
+                                            </p>
+                                        </div>
                                     </div>
                                     <div className="text-right">
-                                        <span className="block font-bold text-gray-800">{food.calories} cal</span>
-                                        <div className="flex gap-1 mt-1 justify-end">
-                                            {food.tags && food.tags.slice(0, 2).map((tag, idx) => (
-                                                <span key={idx} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                                                    {tag}
-                                                </span>
-                                            ))}
-                                        </div>
+                                        <span className="block font-bold text-blue-600 text-sm">{food.calories}</span>
+                                        <span className="text-xs text-gray-400">kcal</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
+                    ) : (
+                        <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                            <p className="text-gray-400 mb-2">Chưa có nhật ký ăn uống</p>
+                            <Link to="/recommendations" className="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-200 transition-colors">
+                                Ghi lại món đầu tiên
+                            </Link>
+                        </div>
                     )}
                 </div>
 
-                {/* Right Column: Daily Recommendation (Takes up 1/3 on large screens) */}
-                <div className="lg:col-span-1">
+                {/* === RECOMMENDED FOR YOU === */}
+                <div className="order-1 lg:order-2">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-gray-800">Recommended for You</h2>
-                        <Link to="/daily-recommendations" className="text-blue-600 font-medium hover:underline text-sm">
-                            See All
-                        </Link>
+                        <h2 className="text-lg font-bold text-gray-800">Recommended for You</h2>
+                        <Link to="/daily-recommendations" className="text-blue-600 text-sm font-medium hover:underline">See All</Link>
                     </div>
 
                     {dailyRec ? (
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-                            {/* Decorative Circle */}
-                            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white opacity-10 rounded-full"></div>
-                            
-                            <div className="relative z-10">
-                                <span className="bg-white/20 text-white text-xs font-bold px-2 py-1 rounded-full mb-3 inline-block">
-                                    {dailyRec.highlight}
-                                </span>
-                                <h3 className="text-2xl font-bold mb-1">{dailyRec.name}</h3>
-                                <p className="text-blue-100 text-sm mb-4 line-clamp-2">{dailyRec.reason}</p>
+                        <div className="bg-white rounded-2xl p-5 shadow-lg border border-blue-100 relative overflow-hidden group">
+                            {/* Background decoration */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -z-0 opacity-50 transition-transform group-hover:scale-110"></div>
+
+                            <div className="flex flex-col items-center text-center z-10 relative">
+                                <div className="w-32 h-32 bg-gray-100 rounded-full mb-4 overflow-hidden shadow-md border-4 border-white">
+                                    {dailyRec.image ? (
+                                        <img src={dailyRec.image} alt={dailyRec.name} className="w-full h-full object-cover"/>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-4xl">🥗</div>
+                                    )}
+                                </div>
                                 
-                                <div className="flex justify-between items-end">
-                                    <div>
-                                        <p className="text-3xl font-bold">{dailyRec.calories}</p>
-                                        <p className="text-xs text-blue-100 uppercase">Calories</p>
+                                <span className="bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1 rounded-full mb-2">
+                                    Top Pick Today
+                                </span>
+                                
+                                <h3 className="text-xl font-bold text-gray-800 mb-1">{dailyRec.name}</h3>
+                                <p className="text-gray-500 text-sm mb-4 px-4 line-clamp-2">{dailyRec.reason}</p>
+                                
+                                <div className="flex gap-8 mb-6 border-t border-gray-100 pt-4 w-full justify-center">
+                                    <div className="text-center">
+                                        <p className="text-2xl font-bold text-gray-800">{dailyRec.calories}</p>
+                                        <p className="text-xs text-gray-400 uppercase tracking-wide">Calories</p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-xl font-semibold">{dailyRec.protein}g</p>
-                                        <p className="text-xs text-blue-100 uppercase">Protein</p>
+                                    <div className="text-center">
+                                        <p className="text-2xl font-bold text-gray-800">{dailyRec.protein}g</p>
+                                        <p className="text-xs text-gray-400 uppercase tracking-wide">Protein</p>
                                     </div>
                                 </div>
 
-                                <Link to="/daily-recommendations" className="mt-6 block w-full bg-white text-blue-600 text-center py-2 rounded-lg font-bold hover:bg-blue-50 transition-colors">
-                                    View Details
+                                <Link to="/daily-recommendations" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-blue-200 shadow-lg">
+                                    View Full Menu
                                 </Link>
                             </div>
                         </div>
                     ) : (
-                        <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-100">
-                            <p className="text-gray-500">Loading recommendations...</p>
+                        // Loading Skeleton
+                        <div className="bg-white rounded-2xl p-6 text-center shadow-sm border border-gray-100 h-80 flex flex-col items-center justify-center">
+                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                             <p className="text-gray-400 text-sm">Finding best meals for you...</p>
                         </div>
                     )}
                 </div>
+
             </div>
         </div>
     );
