@@ -18,7 +18,7 @@ from calc_nutrients import NutritionRecommender
 
 # Import kiến trúc mạng
 try:
-    from model.lsnet import lsnet_t_distill
+    from model.lsnet import lsnet_b
 except ImportError:
     try:
         from model.lsnet import lsnet_b
