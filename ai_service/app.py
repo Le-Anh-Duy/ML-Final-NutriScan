@@ -10,11 +10,7 @@ import base64
 import urllib.request
 import sys
 import unicodedata
-import json # <--- Thêm import json
-
-# --- XÓA CÁC DÒNG IMPORT FIREBASE ---
-# import firebase_admin
-# from firebase_admin import credentials, firestore
+import json 
 
 from model_config import MODEL_CONFIGS
 from calc_nutrients import NutritionRecommender
@@ -26,9 +22,8 @@ except ImportError:
     try:
         from model.lsnet import lsnet_t as lsnet_t_distill
     except ImportError:
-         print("❌ Critical: Không tìm thấy kiến trúc lsnet")
+         print("Critical: Không tìm thấy kiến trúc lsnet")
 
-# --- CẤU HÌNH SERVER ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -38,15 +33,13 @@ CORS(app)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LOADED_MODELS = {}
 
-# --- KHÔNG CẦN KẾT NỐI FIREBASE NỮA ---
 
-# --- HÀM TẢI DATA TỪ FILE JSON (MỚI) ---
 def get_food_data_local():
-    logger.info("📂 Đang tải Menu món ăn từ file JSON local...")
+    logger.info("Đang tải Menu món ăn từ file JSON local...")
     try:
         # Đọc file food_data.json
         if not os.path.exists("food_data.json"):
-            logger.error("❌ Không tìm thấy file 'food_data.json'. Hãy chạy export_data.py trước!")
+            logger.error("Không tìm thấy file 'food_data.json'. Hãy chạy export_data.py trước!")
             return []
             
         with open("food_data.json", "r", encoding="utf-8") as f:
@@ -56,17 +49,16 @@ def get_food_data_local():
         for item in food_list:
             item["search_norm"] = str(item.get('name', '')).lower()
             
-        logger.info(f"✅ Đã tải {len(food_list)} món ăn.")
+        logger.info(f"Đã tải {len(food_list)} món ăn.")
         return food_list
     except Exception as e:
-        logger.error(f"❌ Lỗi đọc file JSON: {e}")
+        logger.error(f"Lỗi đọc file JSON: {e}")
         return []
 
 # Khởi tạo dữ liệu
 dynamic_food_data = get_food_data_local()
 recommender = NutritionRecommender(dynamic_food_data)
 
-# --- HELPER: TÌM DINH DƯỠNG THEO TÊN ---
 def find_nutrition_by_name(pred_name):
     if not dynamic_food_data: return None
     pred_lower = pred_name.lower().strip()
@@ -83,8 +75,6 @@ def find_nutrition_by_name(pred_name):
         if remove_accents(food_name_lower) == pred_no_accent: return food
     return None
 
-# --- GIỮ NGUYÊN PHẦN CÒN LẠI (Model AI, Route Predict, Recommend...) ---
-# (Phần code bên dưới y hệt file cũ, chỉ cần copy paste lại đoạn load model và route API)
 
 preprocess = transforms.Compose([
     transforms.Resize(256),

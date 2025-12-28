@@ -22,7 +22,7 @@ export const analyzeImage = async (imageFile) => {
     try {
         const base64Image = await toBase64(imageFile);
 
-        console.log("📤 Đang gửi ảnh lên AI Server...");
+        console.log("Đang gửi ảnh lên AI Server...");
         const response = await fetch(`${API_URL}/predict`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -37,7 +37,7 @@ export const analyzeImage = async (imageFile) => {
             throw new Error(data.message || "Lỗi nhận diện từ Server");
         }
     } catch (error) {
-        console.error("❌ Lỗi AI Analyze:", error);
+        console.error("Lỗi AI Analyze:", error);
         return null;
     }
 };
@@ -50,9 +50,7 @@ export const analyzeImage = async (imageFile) => {
  * - Bước 4: Gửi cho Backend để tìm món bù đắp phần thiếu
  */
 export const getDailyRecommendations = async (userProfile, userId) => {
-    // Cache key theo ngày để tránh gọi API quá nhiều nếu không cần thiết
-    // Tuy nhiên với dynamic recommendation, ta nên gọi trực tiếp để cập nhật ngay khi vừa ăn xong
-    const todayStr = new Date().toDateString(); // VD: "Sun Dec 28 2025"
+    const todayStr = new Date().toDateString();
 
     try {
         // --- BƯỚC 1 & 2: TÍNH TOÁN DINH DƯỠNG ĐÃ NẠP HÔM NAY ---
@@ -95,7 +93,7 @@ export const getDailyRecommendations = async (userProfile, userId) => {
 
         // --- BƯỚC 3: GỌI BACKEND PYTHON ---
         // Gửi kèm eatenToday để Backend trừ đi
-        console.log("📤 Đang lấy gợi ý từ AI...", eatenToday);
+        console.log("Đang lấy gợi ý từ AI...", eatenToday);
         
         const response = await fetch(`${API_URL}/recommend`, {
             method: 'POST',
@@ -114,12 +112,12 @@ export const getDailyRecommendations = async (userProfile, userId) => {
             // Lưu cache (tùy chọn, ở đây mình trả về luôn cho tươi mới)
             return data.recommendations;
         } else {
-            console.warn("⚠️ AI không trả về gợi ý nào.");
+            console.warn("AI không trả về gợi ý nào.");
             return [];
         }
 
     } catch (error) {
-        console.error("❌ Lỗi lấy gợi ý:", error);
+        console.error("Lỗi lấy gợi ý:", error);
         // Trả về mảng rỗng để UI không bị crash
         return [];
     }
