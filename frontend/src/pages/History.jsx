@@ -130,7 +130,7 @@ const History = () => {
                     <p className="text-gray-500 text-sm mb-6 max-w-xs mx-auto">
                         Start scanning your food to track calories and nutrition.
                     </p>
-                    <Link to="/add-food" className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition">
+                    <Link to="/recommendations" className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition">
                         Scan Meal Now
                     </Link>
                 </div>

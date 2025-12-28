@@ -129,7 +129,7 @@ const Home = () => {
                         ) : (
                             <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
                                 <p className="text-gray-400 text-sm">No meals scanned yet.</p>
-                                <Link to="/add-food" className="text-blue-500 text-sm mt-2 inline-block font-medium">Scan now</Link>
+                                <Link to="/recommendations" className="text-blue-500 text-sm mt-2 inline-block font-medium">Scan now</Link>
                             </div>
                         )}
                     </div>
