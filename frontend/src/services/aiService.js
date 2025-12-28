@@ -1,12 +1,11 @@
-import { foodDatabase } from '../data/foodDatabase';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-// Lấy URL API từ biến môi trường (file .env)
-const API_URL = import.meta.env.VITE_AI_API_URL; // Ví dụ: http://localhost:5000
+// Lấy URL API từ biến môi trường
+const API_URL = import.meta.env.VITE_AI_API_URL || "http://localhost:5000";
 
 /**
- * Helper: Chuyển file ảnh sang chuỗi Base64 để gửi qua JSON
+ * Helper: Chuyển file ảnh sang Base64
  */
 const toBase64 = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -17,165 +16,111 @@ const toBase64 = file => new Promise((resolve, reject) => {
 
 /**
  * 1. CHỨC NĂNG QUÉT ẢNH (AI SCAN)
- * Gọi xuống Backend Python để nhận diện món ăn
+ * Gửi ảnh lên Backend Python để nhận diện món ăn (/predict)
  */
 export const analyzeImage = async (imageFile) => {
     try {
-        if (!API_URL) throw new Error("Chưa cấu hình VITE_AI_API_URL trong file .env");
-
-        // B1: Chuyển ảnh sang Base64
         const base64Image = await toBase64(imageFile);
 
-        // B2: Gọi API Python (/predict)
-        console.log("Sending image to AI Backend...");
+        console.log("📤 Đang gửi ảnh lên AI Server...");
         const response = await fetch(`${API_URL}/predict`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                image: base64Image,
-                // model_id: "lsnet_tiny_103" // Tùy chọn, backend đang mặc định lấy model đầu tiên
-            }),
+            body: JSON.stringify({ image: base64Image })
         });
 
-        if (!response.ok) {
-            throw new Error(`Server Error: ${response.statusText}`);
-        }
-
         const data = await response.json();
-        if (!data.success) throw new Error(data.message || 'Lỗi nhận diện từ AI');
-
-        // B3: Làm giàu dữ liệu (Enrichment)
-        // AI chỉ trả về tên (ví dụ: "banh-mi"), ta cần lấy Calo/Protein từ foodDatabase
         
-        const enrichPrediction = (aiPred) => {
-            // Chuẩn hóa tên để tìm kiếm (bỏ dấu gạch ngang, chữ thường)
-            const aiNameClean = aiPred.name.replace(/-/g, ' ').toLowerCase();
-            
-            // Tìm trong database nội bộ món nào có tên giống nhất
-            const localFood = foodDatabase.find(f => 
-                f.name.toLowerCase().includes(aiNameClean) || 
-                (f.id && f.id.toLowerCase() === aiNameClean)
-            );
-
-            // Ưu tiên lấy thông tin từ localFood (vì có calo chuẩn), nếu không thì dùng tạm AI
-            return {
-                name: localFood ? localFood.name : aiPred.name,
-                calories: localFood ? localFood.calories : 0, // AI thường không trả về calo chính xác
-                protein: localFood ? localFood.protein : 0,
-                fat: localFood ? localFood.fat : 0,
-                carbs: localFood ? localFood.carbs : 0,
-                confidence: aiPred.confidence,
-                image: localFood ? localFood.image : null // Lấy ảnh đẹp từ DB nếu có
-            };
-        };
-
-        const enrichedBestMatch = enrichPrediction(data.bestMatch);
-        const enrichedPredictions = data.predictions ? data.predictions.map(enrichPrediction) : [];
-
-        return {
-            bestMatch: enrichedBestMatch,
-            predictions: enrichedPredictions
-        };
-
+        if (data.success) {
+            return data; // Trả về { predictions, bestMatch }
+        } else {
+            throw new Error(data.message || "Lỗi nhận diện từ Server");
+        }
     } catch (error) {
-        console.error("AI Scan Error:", error);
-        throw new Error("Không thể nhận diện món ăn. Hãy kiểm tra kết nối Server.");
+        console.error("❌ Lỗi AI Analyze:", error);
+        return null;
     }
 };
 
 /**
- * 2. CHỨC NĂNG GỢI Ý MÓN ĂN (DAILY RECOMMENDATIONS)
- * Cache 24h + Thuật toán tính toán dinh dưỡng (Python)
+ * 2. CHỨC NĂNG GỢI Ý THỰC ĐƠN (DYNAMIC RECOMMENDATION)
+ * - Bước 1: Lấy lịch sử ăn uống từ Firestore (user.recentScans)
+ * - Bước 2: Lọc ra các món ĐÃ ĂN HÔM NAY
+ * - Bước 3: Tính tổng dinh dưỡng đã nạp
+ * - Bước 4: Gửi cho Backend để tìm món bù đắp phần thiếu
  */
 export const getDailyRecommendations = async (userProfile, userId) => {
-    if (!userId) return [];
+    // Cache key theo ngày để tránh gọi API quá nhiều nếu không cần thiết
+    // Tuy nhiên với dynamic recommendation, ta nên gọi trực tiếp để cập nhật ngay khi vừa ăn xong
+    const todayStr = new Date().toDateString(); // VD: "Sun Dec 28 2025"
 
-    const todayStr = new Date().toDateString(); // Ví dụ: "Mon Dec 28 2025"
-    const cacheRef = doc(db, 'daily_caches', userId);
-
-    // --- BƯỚC 1: KIỂM TRA CACHE FIREBASE ---
     try {
-        const docSnap = await getDoc(cacheRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            // Nếu cache tồn tại VÀ đúng ngày hôm nay -> Dùng lại ngay
-            if (data.date === todayStr && data.recommendations?.length > 0) {
-                console.log("Serving cached recommendations (From Firebase)");
-                return data.recommendations;
+        // --- BƯỚC 1 & 2: TÍNH TOÁN DINH DƯỠNG ĐÃ NẠP HÔM NAY ---
+        let eatenToday = { calories: 0, protein: 0, fat: 0, carbs: 0 };
+
+        if (userId) {
+            const userDoc = await getDoc(doc(db, "users", userId));
+            
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                const scans = userData.recentScans || [];
+
+                // Lọc các món ăn có timestamp trùng với ngày hôm nay
+                const todayMeals = scans.filter(meal => {
+                    let mealDate = new Date();
+                    
+                    // Xử lý timestamp của Firestore (dạng object có hàm toDate())
+                    if (meal.timestamp && typeof meal.timestamp.toDate === 'function') {
+                        mealDate = meal.timestamp.toDate();
+                    } 
+                    // Xử lý nếu lưu dạng chuỗi hoặc số
+                    else if (meal.timestamp) {
+                        mealDate = new Date(meal.timestamp);
+                    }
+                    
+                    return mealDate.toDateString() === todayStr;
+                });
+
+                // Cộng dồn
+                todayMeals.forEach(meal => {
+                    eatenToday.calories += Number(meal.calories || 0);
+                    eatenToday.protein += Number(meal.protein || 0);
+                    eatenToday.fat += Number(meal.fat || 0);
+                    eatenToday.carbs += Number(meal.carbs || 0);
+                });
+
+                console.log(`📊 Hôm nay đã ăn: ${todayMeals.length} món - ${eatenToday.calories} Kcal`);
             }
         }
-    } catch (e) { 
-        console.warn("⚠️ Cache read warning:", e); 
-    }
 
-    // --- BƯỚC 2: NẾU KHÔNG CÓ CACHE -> GỌI PYTHON API ---
-    let finalRecs = [];
-    try {
-        console.log("Calling Python Calculation Engine (/recommend)...");
+        // --- BƯỚC 3: GỌI BACKEND PYTHON ---
+        // Gửi kèm eatenToday để Backend trừ đi
+        console.log("📤 Đang lấy gợi ý từ AI...", eatenToday);
         
-        // Chuẩn bị dữ liệu gửi xuống Python (Xử lý các trường thiếu)
-        const payload = {
-            userProfile: {
-                ...userProfile,
-                // Tính tuổi: Nếu có ngày sinh thì tính, không thì mặc định 25
-                age: userProfile.birthDate 
-                    ? (new Date().getFullYear() - new Date(userProfile.birthDate).getFullYear()) 
-                    : 25,
-                weight: Number(userProfile.weight) || 60,
-                height: Number(userProfile.height) || 170,
-                gender: userProfile.gender || 'Male',
-                activityLevel: userProfile.activityLevel || 'Medium',
-                goal: userProfile.goal || 'Maintain Weight'
-            }
-        };
-
         const response = await fetch(`${API_URL}/recommend`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userProfile: userProfile, // Chiều cao, cân nặng, mục tiêu
+                eatenToday: eatenToday    // Dữ liệu đã ăn (để tính phần thiếu)
+            }),
         });
 
         const data = await response.json();
 
-        if (data.success && data.recommendations.length > 0) {
-            finalRecs = data.recommendations;
+        if (data.success && data.recommendations) {
+            // Lưu cache (tùy chọn, ở đây mình trả về luôn cho tươi mới)
+            return data.recommendations;
         } else {
-            throw new Error(data.message || "Python trả về danh sách rỗng");
+            console.warn("⚠️ AI không trả về gợi ý nào.");
+            return [];
         }
 
     } catch (error) {
-        console.error("Backend Recommendation Failed, using fallback logic:", error);
-        
-        // Nếu Server Python chết hoặc lỗi, dùng logic Random để app không bị chết
-        const goal = userProfile?.goal || 'Maintain Weight';
-        const pickRandom = (arr, n) => arr.sort(() => 0.5 - Math.random()).slice(0, n);
-
-        if (goal === 'Lose Weight') {
-            finalRecs = pickRandom(foodDatabase.filter(f => f.calories < 400), 3);
-        } else if (goal === 'Gain Muscle') {
-            finalRecs = pickRandom(foodDatabase.filter(f => f.protein > 20), 3);
-        } else {
-            finalRecs = pickRandom(foodDatabase, 3);
-        }
-        
-        // Gán lý do mặc định
-        finalRecs = finalRecs.map(f => ({
-            ...f,
-            reason: "Gợi ý thay thế (Server đang bảo trì)"
-        }));
+        console.error("❌ Lỗi lấy gợi ý:", error);
+        // Trả về mảng rỗng để UI không bị crash
+        return [];
     }
-
-    // --- BƯỚC 4: LƯU KẾT QUẢ VÀO CACHE ---
-    try {
-        await setDoc(cacheRef, {
-            date: todayStr,
-            recommendations: finalRecs,
-            updatedAt: new Date()
-        });
-        console.log("New recommendations saved to Cache");
-    } catch (e) { 
-        console.error("Cache save error:", e); 
-    }
-
-    return finalRecs;
 };

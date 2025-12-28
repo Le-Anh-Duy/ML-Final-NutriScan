@@ -8,140 +8,180 @@ import io
 import logging
 import base64
 import urllib.request
+import sys
+import unicodedata
+import json # <--- Thêm import json
+
+# --- XÓA CÁC DÒNG IMPORT FIREBASE ---
+# import firebase_admin
+# from firebase_admin import credentials, firestore
+
 from model_config import MODEL_CONFIGS
 from calc_nutrients import NutritionRecommender
-from food_data import FOOD_DATA
 
-# Khởi tạo Recommender
-recommender = NutritionRecommender(FOOD_DATA)
-# --- SETUP ---
+# Import kiến trúc mạng
+try:
+    from model.lsnet import lsnet_t_distill
+except ImportError:
+    try:
+        from model.lsnet import lsnet_t as lsnet_t_distill
+    except ImportError:
+         print("❌ Critical: Không tìm thấy kiến trúc lsnet")
+
+# --- CẤU HÌNH SERVER ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app) # Allow React Frontend to connect
+CORS(app)
 
-# Device Configuration
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LOADED_MODELS = {}
 
-# --- PREPROCESSING ---
-# Standard ImageNet normalization
+# --- KHÔNG CẦN KẾT NỐI FIREBASE NỮA ---
+
+# --- HÀM TẢI DATA TỪ FILE JSON (MỚI) ---
+def get_food_data_local():
+    logger.info("📂 Đang tải Menu món ăn từ file JSON local...")
+    try:
+        # Đọc file food_data.json
+        if not os.path.exists("food_data.json"):
+            logger.error("❌ Không tìm thấy file 'food_data.json'. Hãy chạy export_data.py trước!")
+            return []
+            
+        with open("food_data.json", "r", encoding="utf-8") as f:
+            food_list = json.load(f)
+            
+        # Thêm trường search_norm để tìm kiếm
+        for item in food_list:
+            item["search_norm"] = str(item.get('name', '')).lower()
+            
+        logger.info(f"✅ Đã tải {len(food_list)} món ăn.")
+        return food_list
+    except Exception as e:
+        logger.error(f"❌ Lỗi đọc file JSON: {e}")
+        return []
+
+# Khởi tạo dữ liệu
+dynamic_food_data = get_food_data_local()
+recommender = NutritionRecommender(dynamic_food_data)
+
+# --- HELPER: TÌM DINH DƯỠNG THEO TÊN ---
+def find_nutrition_by_name(pred_name):
+    if not dynamic_food_data: return None
+    pred_lower = pred_name.lower().strip()
+    
+    def remove_accents(input_str):
+        nfkd_form = unicodedata.normalize('NFKD', input_str)
+        return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+    pred_no_accent = remove_accents(pred_lower)
+
+    for food in dynamic_food_data:
+        food_name_lower = food['name'].lower()
+        if food_name_lower == pred_lower: return food
+        if remove_accents(food_name_lower) == pred_no_accent: return food
+    return None
+
+# --- GIỮ NGUYÊN PHẦN CÒN LẠI (Model AI, Route Predict, Recommend...) ---
+# (Phần code bên dưới y hệt file cũ, chỉ cần copy paste lại đoạn load model và route API)
+
 preprocess = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(224),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                         std=[0.229, 0.224, 0.225]),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# --- HELPER FUNCTIONS ---
 def download_file_if_missing(url, path):
-    if not url: return
     if not os.path.exists(path):
-        logger.info(f"Downloading {path}...")
+        if not url: return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
             urllib.request.urlretrieve(url, path)
         except Exception as e:
             logger.error(f"Download failed: {e}")
 
-def load_models():
-    """Load model into memory on startup"""
-    logger.info(f"Loading models on {DEVICE}...")
-    
-    for config in MODEL_CONFIGS:
-        try:
-            # 1. Ensure files exist
-            download_file_if_missing(config.get("classes_url"), config["classes_path"])
-            download_file_if_missing(config.get("weights_url"), config["weights_path"])
+def get_model(model_id):
+    config = next((item for item in MODEL_CONFIGS if item["id"] == model_id), None)
+    if not config: raise ValueError(f"Unknown model ID: {model_id}")
 
-            # 2. Load Class Names
-            if not os.path.exists(config["classes_path"]):
-                logger.error(f"Classes file missing: {config['classes_path']}")
-                continue
-                
-            with open(config["classes_path"], "r", encoding="utf-8") as f:
-                classes = [s.strip() for s in f.readlines()]
+    if model_id not in LOADED_MODELS:
+        logger.info(f"Loading model: {config['name']}...")
+        download_file_if_missing(config.get('weights_url'), config['weights_path'])
+        download_file_if_missing(config.get('classes_url'), config['classes_path'])
+        
+        classes = ["Unknown"]
+        if os.path.exists(config['classes_path']):
+            with open(config['classes_path'], "r", encoding="utf-8") as f:
+                classes = [line.strip() for line in f.readlines()]
 
-            # 3. Load Model Architecture
-            if config["arch_fn"] is None:
-                logger.error(f"Model architecture not found for {config['id']}")
-                continue
-                
-            model = config["arch_fn"](num_classes=config["num_classes"], pretrained=False)
-            
-            # 4. Load Weights
-            if os.path.exists(config["weights_path"]):
-                checkpoint = torch.load(config["weights_path"], map_location=DEVICE)
-                state_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
+        model = lsnet_t_distill(num_classes=len(classes))
+        if os.path.exists(config['weights_path']):
+            try:
+                state_dict = torch.load(config['weights_path'], map_location=DEVICE)
                 model.load_state_dict(state_dict, strict=False)
-                model.to(DEVICE)
-                model.eval()
-            else:
-                logger.error(f"Weights file missing: {config['weights_path']}")
-                continue
-
-            # 5. Save to Global Dictionary
-            LOADED_MODELS[config["id"]] = {
-                "model": model, 
-                "classes": classes
-            }
-            logger.info(f"✅ Successfully loaded: {config['name']}")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to load {config['id']}: {e}")
-
-# Initialize models immediately
-load_models()
-
-# --- API ENDPOINTS ---
+            except Exception as e:
+                logger.error(f"Lỗi load state_dict: {e}")
+        
+        model.to(DEVICE)
+        model.eval()
+        LOADED_MODELS[model_id] = {'model': model, 'classes': classes}
+        
+    return LOADED_MODELS[model_id]
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if not LOADED_MODELS:
-        return jsonify({'success': False, 'message': 'AI Model not loaded'}), 503
-
     try:
-        data = request.json
-        image_data = data.get('image', '')
-        
-        if not image_data:
-            return jsonify({'success': False, 'message': 'No image data provided'}), 400
+        default_model_id = MODEL_CONFIGS[0]['id'] 
+        if 'file' not in request.files and 'image' not in request.json:
+             return jsonify({'success': False, 'message': 'No image provided'}), 400
 
-        # 1. Decode Base64 Image
-        if ',' in image_data:
-            image_data = image_data.split(',')[1]
-        
-        image_bytes = base64.b64decode(image_data)
+        if 'file' in request.files:
+            file = request.files['file']
+            image_bytes = file.read()
+        else:
+            image_data = request.json['image']
+            if "," in image_data: image_data = image_data.split(",")[1]
+            image_bytes = base64.b64decode(image_data)
+
         image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-
-        # 2. Select Model (Default to the first one)
-        model_info = list(LOADED_MODELS.values())[0]
-        model = model_info["model"]
-        classes = model_info["classes"]
-
-        # 3. Inference
         input_tensor = preprocess(image).unsqueeze(0).to(DEVICE)
-        
-        with torch.no_grad():
-            output = model(input_tensor)
-        
-        # 4. Process Results
-        probabilities = torch.nn.functional.softmax(output[0], dim=0)
-        top5_prob, top5_id = torch.topk(probabilities, 5)
+        model_data = get_model(default_model_id)
+        model = model_data['model']
+        classes = model_data['classes']
 
+        with torch.no_grad():
+            outputs = model(input_tensor)
+            probabilities = torch.nn.functional.softmax(outputs, dim=1)
+            
+        top_prob, top_id = torch.topk(probabilities, 3)
+        single_probs = top_prob[0]
+        single_ids = top_id[0]
+        
         predictions = []
-        for i in range(top5_prob.size(0)):
-            idx = top5_id[i].item()
-            score = top5_prob[i].item()
+        for i in range(len(single_probs)):
+            idx = single_ids[i].item()
+            score = single_probs[i].item()
+            label = classes[idx] if idx < len(classes) else f"Class {idx}"
             
-            label = classes[idx] if idx < len(classes) else str(idx)
+            food_info = find_nutrition_by_name(label)
             
-            predictions.append({
+            pred_obj = {
                 'name': label,
-                'confidence': float(score)
-            })
+                'confidence': float(score),
+                'calories': 0, 'protein': 0, 'fat': 0, 'carbs': 0, 'image': ''
+            }
+            
+            if food_info:
+                pred_obj['name'] = food_info['name']
+                pred_obj['calories'] = food_info.get('Energy', 0)
+                pred_obj['protein'] = food_info.get('Protein', 0)
+                pred_obj['fat'] = food_info.get('Fat', 0)
+                pred_obj['carbs'] = food_info.get('Carbohydrate', 0)
+                pred_obj['image'] = food_info.get('image', '')
+            
+            predictions.append(pred_obj)
 
         return jsonify({
             'success': True,
@@ -153,31 +193,22 @@ def predict():
         logger.error(f"Prediction Error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@app.route('/', methods=['GET'])
-def health():
-    return jsonify({
-        'status': 'online',
-        'models_loaded': list(LOADED_MODELS.keys())
-    })
-    
 @app.route('/recommend', methods=['POST'])
 def recommend():
     try:
         data = request.json
         user_profile = data.get('userProfile', {})
-        
-        # Gọi thuật toán Python
-        recommendations = recommender.get_recommendations(user_profile)
-        
-        return jsonify({
-            'success': True,
-            'recommendations': recommendations
-        })
-
+        eaten_today = data.get('eatenToday', None)
+        recommendations = recommender.get_recommendations(user_profile, eaten_today)
+        return jsonify({'success': True, 'recommendations': recommendations})
     except Exception as e:
         logger.error(f"Recommendation Error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
-    
+
+@app.route('/', methods=['GET'])
+def health():
+    return jsonify({'status': 'online', 'data_source': 'local_json', 'menu_size': len(dynamic_food_data)})
+
 if __name__ == '__main__':
-    print("🚀 AI Server starting on http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
