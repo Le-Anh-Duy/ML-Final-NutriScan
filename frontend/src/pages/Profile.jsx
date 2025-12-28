@@ -4,10 +4,7 @@ import { db } from '../config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
-const [isSaving, setIsSaving] = useState(false); // Shows "Saving..." loading state
-const [isEditing, setIsEditing] = useState(false); // Toggles between View/Edit mode
-
-// Helper: Check if date is today
+// Helper: Check if date is today (Can stay outside component)
 const isToday = (dateStringOrTimestamp) => {
     if (!dateStringOrTimestamp) return false;
     
@@ -26,60 +23,13 @@ const isToday = (dateStringOrTimestamp) => {
            date.getFullYear() === today.getFullYear();
 };
 
-const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    const healthFields = ['height', 'weight', 'goal'];
-
-    if (healthFields.includes(name)) {
-        // Update nested healthProfile object
-        setUser(prev => ({
-            ...prev,
-            healthProfile: {
-                ...prev.healthProfile,
-                [name]: value
-            }
-        }));
-    } else {
-        // Update top-level fields (like Name)
-        setUser(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    }
-};
-
-const handleSave = async () => {
-    if (!currentUser) return;
-    
-    setIsSaving(true);
-    try {
-        const userRef = doc(db, "users", currentUser.uid);
-        
-        // This pushes the current state to Firebase
-        await updateDoc(userRef, {
-            name: user.name,
-            healthProfile: user.healthProfile
-        });
-        
-        setIsEditing(false); // Exit edit mode
-        alert("Profile updated successfully!");
-    } catch (error) {
-        console.error("Error saving:", error);
-        alert("Error saving profile. Please try again.");
-    } finally {
-        setIsSaving(false);
-    }
-};
-
 const Profile = () => {
     const { currentUser, logout } = useAuth();
     const navigate = useNavigate();
+    
+    // 1. ALL STATES MUST BE INSIDE THE COMPONENT
     const [loading, setLoading] = useState(true);
-
-    // State for saving loading status
     const [isSaving, setIsSaving] = useState(false);
-
-    // State for edit mode
     const [isEditing, setIsEditing] = useState(false);
     
     // User data state
@@ -99,10 +49,11 @@ const Profile = () => {
     const [todayStats, setTodayStats] = useState({
         calories: 0,
         protein: 0,
-        foods: [] // List of today's foods
+        foods: [] 
     });
 
-    // Logout function
+    // 2. HANDLER FUNCTIONS MUST BE INSIDE THE COMPONENT (to access state)
+    
     const handleLogout = async () => {
         try {
             await logout();
@@ -117,7 +68,7 @@ const Profile = () => {
         const healthFields = ['height', 'weight', 'goal'];
 
         if (healthFields.includes(name)) {
-            // Update health profile (nested object)
+            // Update nested healthProfile object
             setUser(prev => ({
                 ...prev,
                 healthProfile: {
@@ -126,7 +77,7 @@ const Profile = () => {
                 }
             }));
         } else {
-            // Update basic info
+            // Update top-level fields (like Name)
             setUser(prev => ({
                 ...prev,
                 [name]: value
@@ -134,18 +85,20 @@ const Profile = () => {
         }
     };
 
-    // 4. Save data to Firestore
     const handleSave = async () => {
         if (!currentUser) return;
         
         setIsSaving(true);
         try {
             const userRef = doc(db, "users", currentUser.uid);
+            
+            // This pushes the current state to Firebase
             await updateDoc(userRef, {
                 name: user.name,
                 healthProfile: user.healthProfile
             });
-            setIsEditing(false);
+            
+            setIsEditing(false); // Exit edit mode
             alert("Profile updated successfully!");
         } catch (error) {
             console.error("Error saving:", error);
@@ -155,6 +108,7 @@ const Profile = () => {
         }
     };
     
+    // 3. LOAD DATA EFFECT
     useEffect(() => {
         const fetchUserData = async () => {
             if (currentUser) {
@@ -163,18 +117,16 @@ const Profile = () => {
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
                         
-                        // 1. Update basic User info
+                        // Update basic User info with defaults
                         setUser(prev => ({
                             ...prev,
                             ...userData,
-
                             email: userData.email || currentUser.email,
-                            // Fallbacks if fields don't exist
                             healthProfile: userData.healthProfile || { height: '', weight: '', goal: 'Maintain Weight' },
                             recentScans: userData.recentScans || []
                         }));
 
-                        // 2. CALCULATE TODAY'S NUTRITION
+                        // Calculate Today's Stats
                         const scans = userData.recentScans || [];
                         const todaysFoods = scans.filter(food => isToday(food.date || food.timestamp));
                         
@@ -184,7 +136,7 @@ const Profile = () => {
                         setTodayStats({
                             calories: totalCalories,
                             protein: totalProtein,
-                            foods: todaysFoods.reverse() // Newest foods first
+                            foods: todaysFoods.reverse()
                         });
                     }
                 } catch (error) {
@@ -374,7 +326,7 @@ const Profile = () => {
                         ) : (
                             <p className="font-semibold text-blue-600">
                                 {user.healthProfile.goal === 'Lose Weight' ? 'Lose Weight' : 
-                                user.healthProfile.goal === 'Gain Muscle' ? 'Gain Muscle' : 'Maintain Weight'}
+                                 user.healthProfile.goal === 'Gain Muscle' ? 'Gain Muscle' : 'Maintain Weight'}
                             </p>
                         )}
                     </div>
