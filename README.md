@@ -83,41 +83,47 @@ food-recommendation-app
    Navigate to `http://localhost:3000` to view the application.
 
 ## AI Backend Integration
-The application currently uses a mock AI service (`src/services/aiService.js`) for demonstration purposes. To connect it to a real Python AI backend:
+The application utilizes a custom Python AI Backend (Flask) located in the `ai_service` directory to recognize Vietnamese food items using the LSNet model.
 
-1. **Set up the Python Backend**:
-   Ensure your Python API is running (e.g., on `http://localhost:5000`) and accepts POST requests with an image file.
+### 1. Setting up the Python Backend
+To enable the image recognition feature, you must run the local Python server:
 
-2. **Configure Environment Variables**:
-   Add the API URL to your `.env` file:
+1. **Navigate to the AI service directory**:
+   ```bash
+   cd ai_service
+   ```
+
+2. **Install Dependencies**:
+   It is recommended to use a virtual environment (venv/conda).
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the Server**:
+   ```bash
+   python app.py
+   ```
+   You should see a message indicating the server is running at `http://localhost:5000`.
+
+### 2. Configure Environment Variables
+Ensure the React frontend knows where to send the images.
+
+1. Open the `.env` file in the root directory.
+2. Add or update the API URL:
    ```env
    VITE_AI_API_URL=http://localhost:5000/predict
    ```
 
-3. **Update the Service**:
-   Modify `src/services/aiService.js` to make actual API calls:
+### 3. Service Implementation Details
+The integration is handled in `src/services/aiService.js`. Unlike standard file uploads, this application sends images as **Base64 encoded strings** in a JSON payload to ensure compatibility with the specific LSNet implementation.
 
-   ```javascript
-   export const analyzeImage = async (imageFile) => {
-       const formData = new FormData();
-       formData.append('file', imageFile);
+**Current Logic:**
+1. User uploads an image.
+2. Frontend converts image to Base64.
+3. Sends POST request to `http://localhost:5000/predict`.
+4. Backend analyzes image and returns predictions (e.g., `{"name": "Pho Bo", "confidence": 0.95}`).
+5. Frontend maps the predicted name to nutritional data found in `src/data/foodDatabase.js`.
 
-       try {
-           const response = await fetch(import.meta.env.VITE_AI_API_URL, {
-               method: 'POST',
-               body: formData,
-           });
-
-           if (!response.ok) throw new Error('AI Analysis failed');
-
-           const data = await response.json();
-           return data; // Ensure backend returns { predictions: [], bestMatch: {} }
-       } catch (error) {
-           console.error("AI Service Error:", error);
-           throw error;
-       }
-   };
-   ```
 
 ## Recommendation System Logic
 
