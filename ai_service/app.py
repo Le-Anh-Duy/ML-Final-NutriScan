@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import torch
+from torch import tensor
 from torchvision import transforms
 from PIL import Image
 import io
