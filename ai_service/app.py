@@ -107,7 +107,7 @@ def get_model(model_id):
             with open(config['classes_path'], "r", encoding="utf-8") as f:
                 classes = [line.strip() for line in f.readlines()]
 
-        model = lsnet_t_distill(num_classes=len(classes))
+        model = lsnet_b(num_classes=len(classes))
         if os.path.exists(config['weights_path']):
             try:
                 state_dict = torch.load(config['weights_path'], map_location=DEVICE)
