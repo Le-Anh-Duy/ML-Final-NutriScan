@@ -4,16 +4,16 @@ import { db } from '../config/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
-// Helper: Kiểm tra xem date có phải là hôm nay không
+// Helper: Check if date is today
 const isToday = (dateStringOrTimestamp) => {
     if (!dateStringOrTimestamp) return false;
     
     let date;
-    // Xử lý nếu là Firestore Timestamp (có hàm toDate)
+    // Handle Firestore Timestamp
     if (typeof dateStringOrTimestamp.toDate === 'function') {
         date = dateStringOrTimestamp.toDate();
     } else {
-        // Xử lý nếu là chuỗi hoặc Date object
+        // Handle string or Date object
         date = new Date(dateStringOrTimestamp);
     }
 
@@ -28,13 +28,13 @@ const Profile = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
 
-    // State loading khi đang lưu dữ liệu
+    // State for saving loading status
     const [isSaving, setIsSaving] = useState(false);
 
-    // State kiểm soát chế độ sửa
+    // State for edit mode
     const [isEditing, setIsEditing] = useState(false);
     
-    // State dữ liệu user
+    // User data state
     const [user, setUser] = useState({
         name: '',
         email: '',
@@ -47,14 +47,14 @@ const Profile = () => {
         recentScans: []
     });
 
-    // State thống kê hôm nay
+    // Today's stats state
     const [todayStats, setTodayStats] = useState({
         calories: 0,
         protein: 0,
-        foods: [] // Danh sách món ăn hôm nay
+        foods: [] // List of today's foods
     });
 
-    // Hàm đăng xuất
+    // Logout function
     const handleLogout = async () => {
         try {
             await logout();
@@ -69,7 +69,7 @@ const Profile = () => {
         const healthFields = ['height', 'weight', 'goal'];
 
         if (healthFields.includes(name)) {
-            // Cập nhật thông tin sức khỏe (nested object)
+            // Update health profile (nested object)
             setUser(prev => ({
                 ...prev,
                 healthProfile: {
@@ -78,7 +78,7 @@ const Profile = () => {
                 }
             }));
         } else {
-            // Cập nhật thông tin cơ bản (name, email)
+            // Update basic info
             setUser(prev => ({
                 ...prev,
                 [name]: value
@@ -86,11 +86,11 @@ const Profile = () => {
         }
     };
 
-    // 4. Hàm lưu dữ liệu lên Firestore
+    // 4. Save data to Firestore
     const handleSave = async () => {
         if (!currentUser) return;
         
-        setIsSaving(true); // Bắt đầu loading
+        setIsSaving(true);
         try {
             const userRef = doc(db, "users", currentUser.uid);
             await updateDoc(userRef, {
@@ -98,12 +98,12 @@ const Profile = () => {
                 healthProfile: user.healthProfile
             });
             setIsEditing(false);
-            alert("Đã cập nhật hồ sơ!");
+            alert("Profile updated successfully!");
         } catch (error) {
-            console.error("Lỗi khi lưu:", error);
-            alert("Lỗi khi lưu, vui lòng thử lại.");
+            console.error("Error saving:", error);
+            alert("Error saving profile. Please try again.");
         } finally {
-            setIsSaving(false); // Kết thúc loading
+            setIsSaving(false);
         }
     };
     
@@ -115,18 +115,18 @@ const Profile = () => {
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
                         
-                        // 1. Cập nhật thông tin User cơ bản
+                        // 1. Update basic User info
                         setUser(prev => ({
                             ...prev,
                             ...userData,
 
                             email: userData.email || currentUser.email,
-                            // Fallbacks nếu trường không tồn tại
+                            // Fallbacks if fields don't exist
                             healthProfile: userData.healthProfile || { height: '', weight: '', goal: 'Maintain Weight' },
                             recentScans: userData.recentScans || []
                         }));
 
-                        // 2. TÍNH TOÁN DINH DƯỠNG HÔM NAY
+                        // 2. CALCULATE TODAY'S NUTRITION
                         const scans = userData.recentScans || [];
                         const todaysFoods = scans.filter(food => isToday(food.date || food.timestamp));
                         
@@ -136,7 +136,7 @@ const Profile = () => {
                         setTodayStats({
                             calories: totalCalories,
                             protein: totalProtein,
-                            foods: todaysFoods.reverse() // Món mới ăn hiện lên đầu
+                            foods: todaysFoods.reverse() // Newest foods first
                         });
                     }
                 } catch (error) {
@@ -150,11 +150,11 @@ const Profile = () => {
         fetchUserData();
     }, [currentUser]);
 
-    if (loading) return <div className="text-center py-10">Đang tải thông tin...</div>;
+    if (loading) return <div className="text-center py-10">Loading profile...</div>;
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-2xl">
-            {/* 1. THÔNG TIN TÀI KHOẢN */}
+            {/* 1. ACCOUNT INFO */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6 flex items-center space-x-4">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-2xl shrink-0">
                     {user.name ? user.name.charAt(0).toUpperCase() : (currentUser.email ? currentUser.email.charAt(0).toUpperCase() : 'U')}
@@ -169,9 +169,9 @@ const Profile = () => {
                                 value={user.name} 
                                 onChange={handleInputChange}
                                 className="w-full border border-blue-300 rounded px-2 py-1 font-bold text-gray-800"
-                                placeholder="Tên hiển thị"
+                                placeholder="Display Name"
                             />
-                            {/* Vô hiệu hóa input email để user không sửa nhầm */}
+                            {/* Disable email input */}
                             <input 
                                 type="text" 
                                 name="email"
@@ -183,7 +183,7 @@ const Profile = () => {
                         </div>
                     ) : (
                         <>
-                            <h1 className="text-xl font-bold text-gray-800 truncate">{user.name || "Người dùng mới"}</h1>
+                            <h1 className="text-xl font-bold text-gray-800 truncate">{user.name || "New User"}</h1>
                             <p className="text-gray-500 text-sm truncate">{user.email || currentUser.email}</p>
                         </>
                     )}
@@ -191,21 +191,21 @@ const Profile = () => {
 
                 <div className="flex flex-col space-y-2">
                     <button onClick={handleLogout} className="px-3 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200">
-                        Đăng xuất
+                        Logout
                     </button>
-                    {/* Nút bật/tắt sửa */}
+                    {/* Edit toggle button */}
                     {!isEditing && (
                          <button onClick={() => setIsEditing(true)} className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-xs font-bold hover:bg-blue-100">
-                            Sửa
+                            Edit
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* 2. TỔNG QUAN DINH DƯỠNG */}
+            {/* 2. NUTRITION OVERVIEW */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl p-6 shadow-lg text-white mb-6">
                 <h2 className="text-lg font-semibold mb-4 border-b border-blue-400 pb-2">
-                    Hôm nay bạn đã nạp
+                    Nutrition Today
                 </h2>
                 <div className="flex justify-between text-center">
                     <div className="flex-1 border-r border-blue-400">
@@ -218,14 +218,14 @@ const Profile = () => {
                     </div>
                     <div className="flex-1">
                         <p className="text-3xl font-bold">{todayStats.foods.length}</p>
-                        <p className="text-blue-100 text-sm uppercase tracking-wider">Món ăn</p>
+                        <p className="text-blue-100 text-sm uppercase tracking-wider">Meals</p>
                     </div>
                 </div>
             </div>
 
-            {/* 3. CHI TIẾT CÁC MÓN HÔM NAY */}
+            {/* 3. TODAY'S MEALS DETAIL */}
             <div className="mb-8">
-                <h3 className="text-lg font-bold text-gray-800 mb-3">Thực đơn hôm nay</h3>
+                <h3 className="text-lg font-bold text-gray-800 mb-3">Today's Log</h3>
                 {todayStats.foods.length > 0 ? (
                     <div className="space-y-3">
                         {todayStats.foods.map((food, index) => (
@@ -248,40 +248,39 @@ const Profile = () => {
                     </div>
                 ) : (
                     <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                        <p className="text-gray-500">Hôm nay bạn chưa ghi nhận món ăn nào.</p>
+                        <p className="text-gray-500">No meals logged today.</p>
                         <button onClick={() => navigate('/recommendations')} className="mt-2 text-blue-600 font-medium hover:underline">
-                            Quét món ăn ngay →
+                            Scan a meal now →
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* 4. THÔNG TIN SỨC KHỎE */}
+            {/* 4. HEALTH PROFILE */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-10">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-800">Hồ sơ sức khỏe</h3>
+                    <h3 className="text-lg font-bold text-gray-800">Health Profile</h3>
                     {isEditing ? (
                         <div className="space-x-2">
-                            <button onClick={() => setIsEditing(false)} disabled={isSaving} className="text-gray-500 text-sm hover:underline">Hủy</button>
-                            {/* (Đã sửa) Disabled nút Lưu khi đang saving */}
+                            <button onClick={() => setIsEditing(false)} disabled={isSaving} className="text-gray-500 text-sm hover:underline">Cancel</button>
                             <button onClick={handleSave} disabled={isSaving} className="text-blue-600 text-sm font-bold hover:underline">
-                                {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                                {isSaving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
                     ) : (
-                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-sm font-medium hover:underline">Chỉnh sửa</button>
+                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-sm font-medium hover:underline">Edit</button>
                     )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                    {/* CHIỀU CAO */}
+                    {/* HEIGHT */}
                     <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-gray-500 text-xs mb-1">Chiều cao (cm)</p>
+                        <p className="text-gray-500 text-xs mb-1">Height (cm)</p>
                         {isEditing ? (
                             <input
                                 type="number"
                                 name="height"
-                                min="0" // (Đã sửa) Thêm min=0
+                                min="0"
                                 value={user.healthProfile.height}
                                 onChange={handleInputChange}
                                 className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-sm"
@@ -292,14 +291,14 @@ const Profile = () => {
                         )}
                     </div>
 
-                    {/* CÂN NẶNG */}
+                    {/* WEIGHT */}
                     <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-gray-500 text-xs mb-1">Cân nặng (kg)</p>
+                        <p className="text-gray-500 text-xs mb-1">Weight (kg)</p>
                         {isEditing ? (
                             <input
                                 type="number"
                                 name="weight"
-                                min="0" // (Đã sửa) Thêm min=0
+                                min="0"
                                 value={user.healthProfile.weight}
                                 onChange={handleInputChange}
                                 className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-sm"
@@ -310,9 +309,9 @@ const Profile = () => {
                         )}
                     </div>
 
-                    {/* MỤC TIÊU */}
+                    {/* GOAL */}
                     <div className="p-3 bg-gray-50 rounded-lg col-span-2">
-                        <p className="text-gray-500 text-xs mb-1">Mục tiêu</p>
+                        <p className="text-gray-500 text-xs mb-1">Goal</p>
                         {isEditing ? (
                             <select
                                 name="goal"
@@ -320,14 +319,14 @@ const Profile = () => {
                                 onChange={handleInputChange}
                                 className="w-full bg-white border border-gray-300 rounded px-2 py-1 text-sm"
                             >
-                                <option value="Lose Weight">Giảm cân</option>
-                                <option value="Maintain Weight">Duy trì cân nặng</option>
-                                <option value="Gain Muscle">Tăng cơ</option>
+                                <option value="Lose Weight">Lose Weight</option>
+                                <option value="Maintain Weight">Maintain Weight</option>
+                                <option value="Gain Muscle">Gain Muscle</option>
                             </select>
                         ) : (
                             <p className="font-semibold text-blue-600">
-                                {user.healthProfile.goal === 'Lose Weight' ? 'Giảm cân' : 
-                                 user.healthProfile.goal === 'Gain Muscle' ? 'Tăng cơ' : 'Duy trì cân nặng'}
+                                {user.healthProfile.goal === 'Lose Weight' ? 'Lose Weight' : 
+                                 user.healthProfile.goal === 'Gain Muscle' ? 'Gain Muscle' : 'Maintain Weight'}
                             </p>
                         )}
                     </div>
