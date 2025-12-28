@@ -12,6 +12,7 @@ import urllib.request
 import sys
 import unicodedata
 import json 
+import timm
 
 from model_config import MODEL_CONFIGS
 from calc_nutrients import NutritionRecommender
