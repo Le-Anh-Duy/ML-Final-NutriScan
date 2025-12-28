@@ -23,7 +23,7 @@ MODEL_CONFIGS = [
         "name": "LSNet Base (Vietnamese Food)",
         
         # Paths to your copied files
-        "weights_path": os.path.join(current_dir, "pretrained", "lsnet_b_finetuned"),
+        "weights_path": os.path.join(current_dir, "pretrained", "lsnet_b_finetuned.pth"),
         "classes_path": os.path.join(current_dir, "pretrained", "vietnamese_food_classes_103.txt"),
         
         # Backup URLs (Auto-download if files are missing)
