@@ -20,7 +20,7 @@ try:
     from model.lsnet import lsnet_t_distill
 except ImportError:
     try:
-        from model.lsnet import lsnet_t as lsnet_t_distill
+        from model.lsnet import lsnet_b
     except ImportError:
          print("Critical: Không tìm thấy kiến trúc lsnet")
 
