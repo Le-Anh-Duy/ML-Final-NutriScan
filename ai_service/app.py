@@ -77,7 +77,7 @@ def find_nutrition_by_name(pred_name):
 
 
 preprocess = transforms.Compose([
-    transforms.Resize(size=248, interpolation=transforms.functional.InterpolationMode.BICUBIC, max_size=None, antialias=warn),
+    transforms.Resize(size=248, interpolation=transforms.functional.InterpolationMode.BICUBIC, max_size=None, antialias='warn'),
     transforms.CenterCrop(size=(224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=tensor([0.4850, 0.4560, 0.4060]), std=tensor([0.2290, 0.2240, 0.2250]))
