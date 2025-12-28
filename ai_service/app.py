@@ -9,7 +9,11 @@ import logging
 import base64
 import urllib.request
 from model_config import MODEL_CONFIGS
+from calc_nutrients import NutritionRecommender
+from food_data import FOOD_DATA
 
+# Khởi tạo Recommender
+recommender = NutritionRecommender(FOOD_DATA)
 # --- SETUP ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -155,7 +159,25 @@ def health():
         'status': 'online',
         'models_loaded': list(LOADED_MODELS.keys())
     })
+    
+@app.route('/recommend', methods=['POST'])
+def recommend():
+    try:
+        data = request.json
+        user_profile = data.get('userProfile', {})
+        
+        # Gọi thuật toán Python
+        recommendations = recommender.get_recommendations(user_profile)
+        
+        return jsonify({
+            'success': True,
+            'recommendations': recommendations
+        })
 
+    except Exception as e:
+        logger.error(f"Recommendation Error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+    
 if __name__ == '__main__':
     print("🚀 AI Server starting on http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -1,5 +1,6 @@
 import torch
 import itertools
+import torch.nn as nn
 
 from timm.models.vision_transformer import trunc_normal_
 from timm.models.layers import SqueezeExcite
@@ -172,8 +173,6 @@ class RepVGGDW(torch.nn.Module):
         conv.bias.data.copy_(final_conv_b)
         return conv
 
-import torch.nn as nn
-
 class LKP(nn.Module):
     def __init__(self, dim, lks, sks, groups):
         super().__init__()
@@ -237,8 +236,12 @@ class LSNet(torch.nn.Module):
                  key_dim=[16, 16, 16, 16],
                  depth=[1, 2, 3, 4],
                  num_heads=[4, 4, 4, 4],
-                 distillation=False,):
+                 distillation=False,
+                 default_cfg=None,  # (+) Thêm tham số này để sửa lỗi timm
+                 **kwargs):         # (+) Thêm tham số này để sửa lỗi timm
         super().__init__()
+
+        self.default_cfg = default_cfg # Lưu lại config nếu cần
 
         resolution = img_size
         self.patch_embed = torch.nn.Sequential(Conv2d_BN(in_chans, embed_dim[0] // 4, 3, 2, 1), torch.nn.ReLU(),
@@ -304,12 +307,12 @@ def _cfg(url='', **kwargs):
     }
 
 default_cfgs = dict(
-    lsnet_t = _cfg(hf_hub='jameslahm/lsnet_t'),
-    lsnet_t_distill = _cfg(hf_hub='jameslahm/lsnet_t_distill'),
-    lsnet_s = _cfg(hf_hub='jameslahm/lsnet_s'),
-    lsnet_s_distill = _cfg(hf_hub='jameslahm/lsnet_s_distill'),
-    lsnet_b = _cfg(hf_hub='jameslahm/lsnet_b'),
-    lsnet_b_distill = _cfg(hf_hub='jameslahm/lsnet_b_distill'),
+    lsnet_t = _cfg(hf_hub_id='jameslahm/lsnet_t'),
+    lsnet_t_distill = _cfg(hf_hub_id='jameslahm/lsnet_t_distill'),
+    lsnet_s = _cfg(hf_hub_id='jameslahm/lsnet_s'),
+    lsnet_s_distill = _cfg(hf_hub_id='jameslahm/lsnet_s_distill'),
+    lsnet_b = _cfg(hf_hub_id='jameslahm/lsnet_b'),
+    lsnet_b_distill = _cfg(hf_hub_id='jameslahm/lsnet_b_distill'),
 )
 
 def _create_lsnet(variant, pretrained=False, **kwargs):
@@ -333,7 +336,7 @@ def lsnet_t(num_classes=1000, distillation=False, pretrained=False, **kwargs):
                   embed_dim=[64, 128, 256, 384],
                   depth=[0, 2, 8, 10],
                   num_heads=[3, 3, 3, 4],
-                  )
+                  **kwargs)
     return model
 
 @register_model
@@ -347,7 +350,7 @@ def lsnet_s(num_classes=1000, distillation=False, pretrained=False, **kwargs):
                   embed_dim=[96, 192, 320, 448],
                   depth=[1, 2, 8, 10],
                   num_heads=[3, 3, 3, 4],
-                  )
+                  **kwargs)
     return model
 
 @register_model
@@ -361,7 +364,7 @@ def lsnet_b(num_classes=1000, distillation=False, pretrained=False, **kwargs):
                   embed_dim=[128, 256, 384, 512],
                   depth=[4, 6, 8, 10],
                   num_heads=[3, 3, 3, 4],
-                  )
+                  **kwargs)
     return model
 
 @register_model

@@ -1,6 +1,9 @@
-flask
+Flask
 flask-cors
 torch
 torchvision
-pillow
+timm
+Pillow
+pandas
 numpy
+requests
