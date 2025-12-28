@@ -7,7 +7,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 # Import the architecture from your local 'model' folder
 try:
     # Try importing the specific function used in training
-    from model.lsnet import lsnet_t_distill
+    from model.lsnet import lsnet_b
 except ImportError:
     # Fallback: Use standard tiny if distill function isn't named explicitly
     try:
