@@ -34,6 +34,34 @@ CORS(app)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LOADED_MODELS = {}
 
+def extract_args_from_checkpoint(checkpoint, default_fallback=None):
+    if default_fallback:
+        cfg.update(default_fallback)
+
+    return checkpoint.get('args', None)
+    
+def load_model(path: str):
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    
+    print(f"Loading model's weights from {path}...")
+    try:
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
+        args = extract_args_from_checkpoint(checkpoint)
+        model = timm.create_model(args.model, num_classes=args.nb_classes, pretrained=False)
+        
+        if 'model' in checkpoint:
+            state_dict = checkpoint['model']
+        else:
+            state_dict = checkpoint
+            
+        model.load_state_dict(state_dict, strict=False)
+        model.to(device)
+        print("Loading model successfully!")
+        return model
+    except Exception as e:
+        print(f"Error on loading weights: {e}")
+        return None
+
 
 def get_food_data_local():
     logger.info("Đang tải Menu món ăn từ file JSON local...")
@@ -107,13 +135,7 @@ def get_model(model_id):
             with open(config['classes_path'], "r", encoding="utf-8") as f:
                 classes = [line.strip() for line in f.readlines()]
 
-        model = lsnet_b(num_classes=len(classes))
-        if os.path.exists(config['weights_path']):
-            try:
-                state_dict = torch.load(config['weights_path'], map_location=DEVICE)
-                model.load_state_dict(state_dict, strict=False)
-            except Exception as e:
-                logger.error(f"Lỗi load state_dict: {e}")
+        model = load_model(config['weights_path'])
         
         model.to(DEVICE)
         model.eval()
